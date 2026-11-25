@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Suivi revenus et dépenses</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; padding: 0 12px; background: #f5f6fa; color: #222; }
+  h1 { text-align: center; }
+  .card { background: #fff; border-radius: 10px; padding: 16px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+  form { display: flex; flex-wrap: wrap; gap: 8px; }
+  input, select, button { padding: 8px; font-size: 14px; }
+  button { background: #2d6cdf; color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
+  button.sec { background: #888; }
+  button.del { background: #d64545; padding: 3px 8px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { text-align: left; padding: 6px; border-bottom: 1px solid #eee; font-size: 14px; }
+  .cat { display: flex; justify-content: space-between; font-weight: bold; background: #eef2fb; padding: 8px; border-radius: 6px; margin-top: 14px; }
+</style>
+</head>
+<body>
+<h1>Suivi revenus et dépenses</h1>
+
+<div class="card">
+  <form id="f">
+    <input type="date" id="date" required>
+    <select id="type"><option value="revenu">Revenu</option><option value="depense">Dépense</option></select>
+    <input list="cats" id="cat" placeholder="Catégorie (ex : Loyer)" required>
+    <datalist id="cats"></datalist>
+    <input id="label" placeholder="Libellé">
+    <input type="number" step="0.01" id="amount" placeholder="Montant €" required>
+    <button type="submit">Ajouter</button>
+    <button type="button" class="sec" id="export">Exporter CSV</button>
+  </form>
+</div>
+
+<div class="card"><canvas id="chart" height="110"></canvas></div>
+
+<div class="card">
+  <h2>Détail des dépenses par catégorie</h2>
+  <div id="detail"></div>
+</div>
+
+<script>
+let data = JSON.parse(localStorage.getItem('ops') || '[]');
+const save = () => localStorage.setItem('ops', JSON.stringify(data));
+const eur = n => n.toLocaleString('fr-FR', {style:'currency', currency:'EUR'});
+let chart;
+
+document.getElementById('date').valueAsDate = new Date();
+
+document.getElementById('f').onsubmit = e => {
+  e.preventDefault();
+  data.push({
+    id: Date.now(),
+    date: date.value,
+    type: type.value,
+    cat: cat.value.trim(),
+    label: label.value.trim(),
+    amount: parseFloat(amount.value)
+  });
+  save(); label.value = ''; amount.value = ''; render();
+};
+
+document.getElementById('export').onclick = () => {
+  const rows = ['date;type;categorie;libelle;montant']
+    .concat(data.map(o => [o.date, o.type, o.cat, o.label, o.amount].join(';')));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([rows.join('\n')], {type:'text/csv'}));
+  a.download = 'operations.csv'; a.click();
+};
+
+function remove(id) { data = data.filter(o => o.id !== id); save(); render(); }
+
+function render() {
+  // Courbes par mois
+  const months = [...new Set(data.map(o => o.date.slice(0,7)))].sort();
+  const sum = t => months.map(m => data.filter(o => o.type===t && o.date.startsWith(m)).reduce((s,o)=>s+o.amount,0));
+  if (chart) chart.destroy();
+  chart = new Chart(document.getElementById('chart'), {
+    type: 'line',
+    data: { labels: months, datasets: [
+      { label: 'Revenus', data: sum('revenu'), borderColor: '#2e9e5b', backgroundColor: '#2e9e5b', tension: .25 },
+      { label: 'Dépenses', data: sum('depense'), borderColor: '#d64545', backgroundColor: '#d64545', tension: .25 }
+    ]},
+    options: { scales: { y: { beginAtZero: true } } }
+  });
+
+  // Datalist des catégories
+  document.getElementById('cats').innerHTML = [...new Set(data.map(o => o.cat))].map(c => `<option value="${c}">`).join('');
+
+  // Détail des dépenses par catégorie
+  const dep = data.filter(o => o.type === 'depense');
+  const cats = [...new Set(dep.map(o => o.cat))].sort();
+  document.getElementById('detail').innerHTML = cats.length ? cats.map(c => {
+    const items = dep.filter(o => o.cat === c).sort((a,b) => b.date.localeCompare(a.date));
+    const total = items.reduce((s,o) => s+o.amount, 0);
+    return `<div class="cat"><span>${c}</span><span>${eur(total)}</span></div>
+      <table>${items.map(o => `<tr><td>${o.date}</td><td>${o.label || ''}</td><td>${eur(o.amount)}</td>
+      <td><button class="del" onclick="remove(${o.id})">×</button></td></tr>`).join('')}</table>`;
+  }).join('') : '<p>Aucune dépense pour le moment.</p>';
+}
+render();
+</script>
+</body>
+</html>
