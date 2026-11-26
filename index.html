@@ -27,6 +27,14 @@ header p{margin:4px 0 0;color:#94a3b8}
 .row{display:flex;flex-direction:column;gap:2px;margin-top:8px;font-size:13px}
 .pos{color:#4ade80}
 .neg{color:#f87171}
+.total{grid-column:1/-1;background:linear-gradient(135deg,#4338ca,#0f766e);box-shadow:0 8px 28px rgba(67,56,202,.35)}
+.total h3{color:#c7d2fe}
+.total .sub{color:#a5b4fc}
+.total .sub2{color:#c7d2fe}
+.total .pos{color:#86efac}
+.total .neg{color:#fecaca}
+.total .big{font-size:32px}
+.total .row{flex-direction:row;flex-wrap:wrap;gap:6px 16px}
 h2{margin:0 0 12px;font-size:17px}
 h4{margin:18px 0 4px;font-size:15px;color:#94a3b8}
 form{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -40,7 +48,7 @@ input,select,button{font-size:16px;padding:11px;border-radius:10px;border:1px so
 .seg{display:flex;gap:4px;background:#0f172a;padding:3px;border-radius:10px}
 .seg button{border:0;padding:6px 10px;font-size:13px;background:transparent;color:#94a3b8}
 .seg button.on{background:#6366f1;color:#fff}
-.chartbox{position:relative;height:280px}
+.chartbox{position:relative;height:320px}
 .cat{display:flex;justify-content:space-between;font-weight:600;background:#0f172a;padding:10px 12px;border-radius:10px;margin-top:12px}
 .item{display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #334155;font-size:14px}
 .item .t{flex:1}
@@ -109,10 +117,12 @@ input,select,button{font-size:16px;padding:11px;border-radius:10px;border:1px so
 
 <script>
 const COLORS = { Abbes: '#818cf8', Entreprise: '#fbbf24' };
+const TOTAL_COLOR = '#34d399';
 const MONTHS = ['Janv.', 'Févr.', 'Mars', 'Avr.', 'Mai', 'Juin', 'Juil.', 'Août', 'Sept.', 'Oct.', 'Nov.', 'Déc.'];
 const FULL = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
 const Y = new Date().getFullYear();
 const eur = n => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
+const eurShort = v => new Intl.NumberFormat('fr-FR', { notation: 'compact', maximumFractionDigits: 1 }).format(v) + ' €';
 const esc = s => { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
 
 let data = [];
@@ -135,6 +145,16 @@ const sumUpTo = (acc, type, m) => data
 const sumBefore = (acc, type, m) => data
   .filter(o => o.account === acc && o.type === type && o.date.slice(0, 7) < m)
   .reduce((s, o) => s + o.amount, 0);
+
+// Dégradé sous une courbe
+const gradient = color => ctx => {
+  const c = ctx.chart, area = c.chartArea;
+  if (!area) return color + '33';
+  const g = c.ctx.createLinearGradient(0, area.top, 0, area.bottom);
+  g.addColorStop(0, color + '66');
+  g.addColorStop(1, color + '00');
+  return g;
+};
 
 // Sélecteur de mois
 $('monthSel').innerHTML = "<option value=''>Tous les mois</option>" +
@@ -230,8 +250,8 @@ function render() {
   $('monthSel').value = selMonth;
   const monthLabel = selMonth ? FULL[parseInt(selMonth.slice(5), 10) - 1] + ' ' + selMonth.slice(0, 4) : '';
 
-  // Cartes des comptes : solde reporté + revenus et dépenses du mois
-  $('cards').innerHTML = names.map(a => {
+  // Chiffres de chaque compte : solde reporté + revenus et dépenses du mois
+  const stats = names.map(a => {
     let r, d, report = 0;
     if (selMonth) {
       report = sumBefore(a, 'revenu', selMonth) - sumBefore(a, 'depense', selMonth);
@@ -241,14 +261,21 @@ function render() {
       r = sumUpTo(a, 'revenu');
       d = sumUpTo(a, 'depense');
     }
-    const reportLine = selMonth ? `<span class='sub2'>Report : ${eur(report)}</span>` : '';
-    return `<div class='acc' style='border-top:4px solid ${COLORS[a]}'>
-      <h3>${a}</h3>
+    return { a: a, r: r, d: d, report: report };
+  });
+  const tot = stats.reduce((t, s) => ({ r: t.r + s.r, d: t.d + s.d, report: t.report + s.report }), { r: 0, d: 0, report: 0 });
+
+  const cardHtml = (title, s, cls, style) => {
+    const reportLine = selMonth ? `<span class='sub2'>Report : ${eur(s.report)}</span>` : '';
+    return `<div class='acc ${cls}' style='${style}'>
+      <h3>${title}</h3>
       <span class='sub'>${selMonth ? 'Solde fin ' + monthLabel : 'Cumul total'}</span>
-      <div class='big'>${eur(report + r - d)}</div>
-      <div class='row'>${reportLine}<span class='pos'>+ ${eur(r)}</span><span class='neg'>− ${eur(d)}</span></div>
+      <div class='big'>${eur(s.report + s.r - s.d)}</div>
+      <div class='row'>${reportLine}<span class='pos'>+ ${eur(s.r)}</span><span class='neg'>− ${eur(s.d)}</span></div>
     </div>`;
-  }).join('');
+  };
+  $('cards').innerHTML = cardHtml('Total Abbes + Entreprise', tot, 'total', '') +
+    stats.map(s => cardHtml(s.a, s, '', 'border-top:4px solid ' + COLORS[s.a])).join('');
 
   // Boutons du graphique
   $('perBtn').textContent = selMonth ? 'Par jour' : 'Par mois';
@@ -285,7 +312,7 @@ function render() {
         return b + v;
       });
     };
-    radius = 3;
+    radius = 0;
     clickFn = undefined;
     $('evoTitle').textContent = 'Évolution · ' + monthLabel;
   } else {
@@ -305,29 +332,76 @@ function render() {
     $('evoTitle').textContent = 'Évolution ' + year;
   }
 
+  // Une courbe par compte + une courbe Total
+  const series = names.map(valuesFor);
+  const totalSeries = labels.map((_, i) => series[0][i] === null ? null : series.reduce((s, x) => s + x[i], 0));
+  const datasets = names.map((a, k) => ({
+    label: a,
+    data: series[k],
+    borderColor: COLORS[a],
+    backgroundColor: gradient(COLORS[a]),
+    fill: 'origin',
+    borderWidth: 3,
+    cubicInterpolationMode: 'monotone',
+    pointRadius: radius,
+    pointHoverRadius: 7,
+    pointBackgroundColor: COLORS[a],
+    pointBorderColor: '#0f172a',
+    pointBorderWidth: 2
+  }));
+  datasets.push({
+    label: 'Total',
+    data: totalSeries,
+    borderColor: TOTAL_COLOR,
+    backgroundColor: TOTAL_COLOR,
+    fill: false,
+    borderWidth: 3,
+    borderDash: [8, 5],
+    cubicInterpolationMode: 'monotone',
+    pointRadius: radius,
+    pointHoverRadius: 7,
+    pointBackgroundColor: TOTAL_COLOR,
+    pointBorderColor: '#0f172a',
+    pointBorderWidth: 2
+  });
+
   if (chart) chart.destroy();
   Chart.defaults.color = '#94a3b8';
   chart = new Chart($('chart'), {
     type: 'line',
-    data: {
-      labels: labels,
-      datasets: names.map(a => ({
-        label: a,
-        data: valuesFor(a),
-        borderColor: COLORS[a],
-        backgroundColor: COLORS[a] + '33',
-        fill: true,
-        tension: cum ? 0 : 0.35,
-        pointRadius: radius
-      }))
-    },
+    data: { labels: labels, datasets: datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       onClick: clickFn,
+      interaction: { mode: 'index', intersect: false },
+      animation: { duration: 700, easing: 'easeOutQuart' },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 18, color: '#cbd5e1' }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(15,23,42,.95)',
+          borderColor: '#334155',
+          borderWidth: 1,
+          padding: 12,
+          cornerRadius: 10,
+          titleColor: '#e2e8f0',
+          bodyColor: '#cbd5e1',
+          usePointStyle: true,
+          callbacks: {
+            label: c => ' ' + c.dataset.label + ' : ' + eur(c.parsed.y)
+          }
+        }
+      },
       scales: {
-        x: { grid: { color: '#1e293b' } },
-        y: { grid: { color: '#334155' } }
+        x: { grid: { display: false }, border: { display: false } },
+        y: {
+          grid: { color: 'rgba(148,163,184,.12)', drawTicks: false },
+          border: { display: false },
+          ticks: { padding: 8, callback: v => eurShort(v) }
+        }
       }
     }
   });
