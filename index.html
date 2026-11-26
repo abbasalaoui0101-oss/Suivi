@@ -22,6 +22,7 @@ header p{margin:4px 0 0;color:#94a3b8}
 .card{margin-bottom:14px}
 .acc h3{margin:0 0 2px;font-size:15px;color:#94a3b8}
 .sub{display:block;font-size:12px;color:#64748b;margin-bottom:6px}
+.sub2{color:#94a3b8}
 .big{font-size:22px;font-weight:700}
 .row{display:flex;flex-direction:column;gap:2px;margin-top:8px;font-size:13px}
 .pos{color:#4ade80}
@@ -130,6 +131,10 @@ const sumMonth = (acc, type, m) => data
 const sumUpTo = (acc, type, m) => data
   .filter(o => o.account === acc && o.type === type && (!m || o.date.slice(0, 7) <= m))
   .reduce((s, o) => s + o.amount, 0);
+// Somme de tout ce qui précède un mois (le report)
+const sumBefore = (acc, type, m) => data
+  .filter(o => o.account === acc && o.type === type && o.date.slice(0, 7) < m)
+  .reduce((s, o) => s + o.amount, 0);
 
 // Sélecteur de mois
 $('monthSel').innerHTML = "<option value=''>Tous les mois</option>" +
@@ -225,15 +230,23 @@ function render() {
   $('monthSel').value = selMonth;
   const monthLabel = selMonth ? FULL[parseInt(selMonth.slice(5), 10) - 1] + ' ' + selMonth.slice(0, 4) : '';
 
-  // Cartes des comptes (mois choisi, ou cumul total)
+  // Cartes des comptes : solde reporté + revenus et dépenses du mois
   $('cards').innerHTML = names.map(a => {
-    const r = selMonth ? sumMonth(a, 'revenu', selMonth) : sumUpTo(a, 'revenu');
-    const d = selMonth ? sumMonth(a, 'depense', selMonth) : sumUpTo(a, 'depense');
+    let r, d, report = 0;
+    if (selMonth) {
+      report = sumBefore(a, 'revenu', selMonth) - sumBefore(a, 'depense', selMonth);
+      r = sumMonth(a, 'revenu', selMonth);
+      d = sumMonth(a, 'depense', selMonth);
+    } else {
+      r = sumUpTo(a, 'revenu');
+      d = sumUpTo(a, 'depense');
+    }
+    const reportLine = selMonth ? `<span class='sub2'>Report : ${eur(report)}</span>` : '';
     return `<div class='acc' style='border-top:4px solid ${COLORS[a]}'>
       <h3>${a}</h3>
-      <span class='sub'>${selMonth ? monthLabel : 'Cumul total'}</span>
-      <div class='big'>${eur(r - d)}</div>
-      <div class='row'><span class='pos'>+ ${eur(r)}</span><span class='neg'>− ${eur(d)}</span></div>
+      <span class='sub'>${selMonth ? 'Solde fin ' + monthLabel : 'Cumul total'}</span>
+      <div class='big'>${eur(report + r - d)}</div>
+      <div class='row'>${reportLine}<span class='pos'>+ ${eur(r)}</span><span class='neg'>− ${eur(d)}</span></div>
     </div>`;
   }).join('');
 
@@ -248,7 +261,7 @@ function render() {
 
   let labels, valuesFor, radius, clickFn;
   if (selMonth) {
-    // Vue d'un seul mois, jour par jour
+    // Vue d'un seul mois, jour par jour, avec le report de départ
     const sy = parseInt(selMonth.slice(0, 4), 10), sm = parseInt(selMonth.slice(5), 10);
     const nDays = new Date(sy, sm, 0).getDate();
     const dayOf = o => parseInt(o.date.slice(8, 10), 10);
@@ -260,11 +273,18 @@ function render() {
     const dsum = (a, t, d) => monthOps
       .filter(o => o.account === a && o.type === t && (cum ? dayOf(o) <= d : dayOf(o) === d))
       .reduce((s, o) => s + o.amount, 0);
-    valuesFor = a => labels.map((_, i) => {
-      const d = i + 1;
-      if (d > lastDay) return null;
-      return metric === 'solde' ? dsum(a, 'revenu', d) - dsum(a, 'depense', d) : dsum(a, metric, d);
-    });
+    const base = a => !cum ? 0
+      : metric === 'solde' ? sumBefore(a, 'revenu', selMonth) - sumBefore(a, 'depense', selMonth)
+      : sumBefore(a, metric, selMonth);
+    valuesFor = a => {
+      const b = base(a);
+      return labels.map((_, i) => {
+        const d = i + 1;
+        if (d > lastDay) return null;
+        const v = metric === 'solde' ? dsum(a, 'revenu', d) - dsum(a, 'depense', d) : dsum(a, metric, d);
+        return b + v;
+      });
+    };
     radius = 3;
     clickFn = undefined;
     $('evoTitle').textContent = 'Évolution · ' + monthLabel;
