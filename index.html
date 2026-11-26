@@ -80,7 +80,7 @@ input,select,button{font-size:16px;padding:11px;border-radius:10px;border:1px so
       <div class='ctrl'>
         <div class='seg' id='modes'>
           <button data-c='1' class='on'>Cumulé</button>
-          <button data-c='0'>Par mois</button>
+          <button data-c='0' id='perBtn'>Par mois</button>
         </div>
         <div class='seg' id='metrics'>
           <button data-m='revenu' class='on'>Revenus</button>
@@ -238,44 +238,73 @@ function render() {
   }).join('');
 
   // Boutons du graphique
+  $('perBtn').textContent = selMonth ? 'Par jour' : 'Par mois';
   document.querySelectorAll('#metrics button').forEach(b => b.classList.toggle('on', b.dataset.m === metric));
   document.querySelectorAll('#modes button').forEach(b => b.classList.toggle('on', (b.dataset.c === '1') === cum));
 
-  // Les 12 mois de l'année en cours
   const now = new Date();
   const year = now.getFullYear();
   const cur = year + '-' + String(now.getMonth() + 1).padStart(2, '0');
-  const months = MONTHS.map((_, i) => year + '-' + String(i + 1).padStart(2, '0'));
-  const lastOp = data.map(o => o.date.slice(0, 7)).filter(k => k.slice(0, 4) === String(year)).sort().pop() || cur;
-  const upTo = lastOp > cur ? lastOp : cur;
-  $('evoTitle').textContent = 'Évolution ' + year;
 
-  const f = cum ? sumUpTo : sumMonth;
-  const val = (a, m) => metric === 'solde'
-    ? f(a, 'revenu', m) - f(a, 'depense', m)
-    : f(a, metric, m);
+  let labels, valuesFor, radius, clickFn;
+  if (selMonth) {
+    // Vue d'un seul mois, jour par jour
+    const sy = parseInt(selMonth.slice(0, 4), 10), sm = parseInt(selMonth.slice(5), 10);
+    const nDays = new Date(sy, sm, 0).getDate();
+    const dayOf = o => parseInt(o.date.slice(8, 10), 10);
+    const monthOps = data.filter(o => o.date.slice(0, 7) === selMonth);
+    const lastDay = selMonth === cur
+      ? Math.max(now.getDate(), ...monthOps.map(dayOf))
+      : nDays;
+    labels = Array.from({ length: nDays }, (_, i) => String(i + 1));
+    const dsum = (a, t, d) => monthOps
+      .filter(o => o.account === a && o.type === t && (cum ? dayOf(o) <= d : dayOf(o) === d))
+      .reduce((s, o) => s + o.amount, 0);
+    valuesFor = a => labels.map((_, i) => {
+      const d = i + 1;
+      if (d > lastDay) return null;
+      return metric === 'solde' ? dsum(a, 'revenu', d) - dsum(a, 'depense', d) : dsum(a, metric, d);
+    });
+    radius = 3;
+    clickFn = undefined;
+    $('evoTitle').textContent = 'Évolution · ' + monthLabel;
+  } else {
+    // Vue de l'année entière
+    const months = MONTHS.map((_, i) => year + '-' + String(i + 1).padStart(2, '0'));
+    const lastOp = data.map(o => o.date.slice(0, 7)).filter(k => k.slice(0, 4) === String(year)).sort().pop() || cur;
+    const upTo = lastOp > cur ? lastOp : cur;
+    const f = cum ? sumUpTo : sumMonth;
+    labels = MONTHS;
+    valuesFor = a => months.map(m => m <= upTo
+      ? (metric === 'solde' ? f(a, 'revenu', m) - f(a, 'depense', m) : f(a, metric, m))
+      : null);
+    radius = 4;
+    clickFn = (e, els) => {
+      if (els.length) { selMonth = months[els[0].index]; render(); }
+    };
+    $('evoTitle').textContent = 'Évolution ' + year;
+  }
+
   if (chart) chart.destroy();
   Chart.defaults.color = '#94a3b8';
   chart = new Chart($('chart'), {
     type: 'line',
     data: {
-      labels: MONTHS,
+      labels: labels,
       datasets: names.map(a => ({
         label: a,
-        data: months.map(m => m <= upTo ? val(a, m) : null),
+        data: valuesFor(a),
         borderColor: COLORS[a],
         backgroundColor: COLORS[a] + '33',
         fill: true,
         tension: cum ? 0 : 0.35,
-        pointRadius: months.map(m => m === selMonth ? 8 : 4)
+        pointRadius: radius
       }))
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      onClick: (e, els) => {
-        if (els.length) { selMonth = months[els[0].index]; render(); }
-      },
+      onClick: clickFn,
       scales: {
         x: { grid: { color: '#1e293b' } },
         y: { grid: { color: '#334155' } }
