@@ -71,7 +71,7 @@ input,select,button{font-size:16px;padding:11px;border-radius:10px;border:1px so
 
   <section class='card'>
     <div class='head'>
-      <h2>Évolution</h2>
+      <h2 id='evoTitle'>Évolution</h2>
       <div class='ctrl'>
         <div class='seg' id='modes'>
           <button data-c='1' class='on'>Cumulé</button>
@@ -103,6 +103,7 @@ input,select,button{font-size:16px;padding:11px;border-radius:10px;border:1px so
 
 <script>
 const COLORS = { Abbes: '#818cf8', Entreprise: '#fbbf24' };
+const MONTHS = ['Janv.', 'Févr.', 'Mars', 'Avr.', 'Mai', 'Juin', 'Juil.', 'Août', 'Sept.', 'Oct.', 'Nov.', 'Déc.'];
 const eur = n => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
 const esc = s => { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
 
@@ -207,26 +208,6 @@ const row = (o, sub) => `<div class='item'>
   <button class='x' onclick='del(${o.id})'>×</button>
 </div>`;
 
-// Liste continue des mois, du premier jusqu'au mois en cours
-function monthRange() {
-  if (!data.length) return [];
-  const now = new Date();
-  const cur = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-  const ms = data.map(o => o.date.slice(0, 7)).sort();
-  const first = ms[0];
-  const last = ms[ms.length - 1] > cur ? ms[ms.length - 1] : cur;
-  const out = [];
-  let [y, mo] = first.split('-').map(Number);
-  while (true) {
-    const k = y + '-' + String(mo).padStart(2, '0');
-    out.push(k);
-    if (k >= last) break;
-    mo++;
-    if (mo > 12) { mo = 1; y++; }
-  }
-  return out;
-}
-
 function render() {
   const names = Object.keys(COLORS);
 
@@ -244,8 +225,15 @@ function render() {
   document.querySelectorAll('#metrics button').forEach(b => b.classList.toggle('on', b.dataset.m === metric));
   document.querySelectorAll('#modes button').forEach(b => b.classList.toggle('on', (b.dataset.c === '1') === cum));
 
-  // Graphique : une courbe par compte
-  const months = monthRange();
+  // Les 12 mois de l'année en cours
+  const now = new Date();
+  const year = now.getFullYear();
+  const cur = year + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const months = MONTHS.map((_, i) => year + '-' + String(i + 1).padStart(2, '0'));
+  const lastOp = data.map(o => o.date.slice(0, 7)).filter(k => k.slice(0, 4) === String(year)).sort().pop() || cur;
+  const upTo = lastOp > cur ? lastOp : cur;
+  $('evoTitle').textContent = 'Évolution ' + year;
+
   const f = cum ? sumUpTo : sumMonth;
   const val = (a, m) => metric === 'solde'
     ? f(a, 'revenu', m) - f(a, 'depense', m)
@@ -255,10 +243,10 @@ function render() {
   chart = new Chart($('chart'), {
     type: 'line',
     data: {
-      labels: months,
+      labels: MONTHS,
       datasets: names.map(a => ({
         label: a,
-        data: months.map(m => val(a, m)),
+        data: months.map(m => m <= upTo ? val(a, m) : null),
         borderColor: COLORS[a],
         backgroundColor: COLORS[a] + '33',
         fill: true,
