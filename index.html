@@ -24,9 +24,11 @@ header p{margin:4px 0 0;color:#94a3b8}
 .pos{color:#4ade80}
 .neg{color:#f87171}
 h2{margin:0 0 12px;font-size:17px}
+h4{margin:18px 0 4px;font-size:15px;color:#94a3b8}
 form{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 input,select,button{font-size:16px;padding:11px;border-radius:10px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-family:inherit}
-#cat,#label,.primary{grid-column:1/-1}
+#cat,#label,.primary,#cancel{grid-column:1/-1}
+#cancel{display:none;background:transparent}
 .primary{background:linear-gradient(135deg,#6366f1,#8b5cf6);border:0;font-weight:600;color:#fff}
 .head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px}
 .head h2{margin:0}
@@ -40,6 +42,7 @@ input,select,button{font-size:16px;padding:11px;border-radius:10px;border:1px so
 .item small{color:#94a3b8;display:block}
 .badge{font-size:11px;padding:2px 8px;border-radius:99px;color:#0f172a;font-weight:600}
 .x{background:#7f1d1d;border:0;padding:4px 10px;font-size:14px}
+.ed{background:#334155;border:0;padding:4px 10px;font-size:14px}
 .ghost{width:100%;background:transparent}
 .empty{color:#94a3b8}
 </style>
@@ -51,16 +54,17 @@ input,select,button{font-size:16px;padding:11px;border-radius:10px;border:1px so
   <section id='cards' class='grid'></section>
 
   <section class='card'>
-    <h2>Nouvelle opération</h2>
+    <h2 id='formTitle'>Nouvelle opération</h2>
     <form id='f'>
       <select id='account'><option>Abbes</option><option>Entreprise</option></select>
       <select id='type'><option value='revenu'>Revenu</option><option value='depense'>Dépense</option></select>
       <input type='date' id='date' required>
       <input type='number' step='0.01' id='amount' placeholder='Montant €' required>
-      <input list='cats' id='cat' placeholder='Catégorie (ex : Loyer)' required>
+      <input list='cats' id='cat' placeholder='Catégorie (ex : Loyer, Salaire)' required>
       <datalist id='cats'></datalist>
       <input id='label' placeholder='Libellé (facultatif)'>
-      <button type='submit' class='primary'>Ajouter</button>
+      <button type='submit' class='primary' id='submit'>Ajouter</button>
+      <button type='button' id='cancel'>Annuler la modification</button>
     </form>
   </section>
 
@@ -78,9 +82,12 @@ input,select,button{font-size:16px;padding:11px;border-radius:10px;border:1px so
 
   <section class='card'>
     <div class='head'>
-      <h2>Détail des dépenses</h2>
+      <h2>Détails</h2>
       <div class='seg' id='filters'></div>
     </div>
+    <h4>Revenus</h4>
+    <div id='incomes'></div>
+    <h4>Dépenses par catégorie</h4>
     <div id='detail'></div>
   </section>
 
@@ -95,7 +102,7 @@ const esc = s => { const d = document.createElement('div'); d.textContent = s; r
 let data = [];
 try { data = JSON.parse(localStorage.getItem('ops') || '[]'); } catch (e) { data = []; }
 data = data.map(o => Object.assign({ account: 'Abbes' }, o));
-let metric = 'solde', filter = 'Tous', chart;
+let metric = 'solde', filter = 'Tous', chart, editId = null;
 
 const save = () => localStorage.setItem('ops', JSON.stringify(data));
 const $ = id => document.getElementById(id);
@@ -103,24 +110,62 @@ const sumOf = (acc, type, m) => data
   .filter(o => o.account === acc && o.type === type && (!m || o.date.startsWith(m)))
   .reduce((s, o) => s + o.amount, 0);
 
-$('date').valueAsDate = new Date();
+function resetForm() {
+  editId = null;
+  $('f').reset();
+  $('date').valueAsDate = new Date();
+  $('submit').textContent = 'Ajouter';
+  $('formTitle').textContent = 'Nouvelle opération';
+  $('cancel').style.display = 'none';
+}
+resetForm();
 
 $('f').onsubmit = e => {
   e.preventDefault();
-  data.push({
-    id: Date.now(),
+  const op = {
     account: $('account').value,
     date: $('date').value,
     type: $('type').value,
     cat: $('cat').value.trim(),
     label: $('label').value.trim(),
     amount: parseFloat($('amount').value)
-  });
+  };
+  if (editId) {
+    const o = data.find(x => x.id === editId);
+    if (o) Object.assign(o, op);
+  } else {
+    data.push(Object.assign({ id: Date.now() }, op));
+  }
   save();
-  $('label').value = '';
-  $('amount').value = '';
+  resetForm();
   render();
 };
+
+$('cancel').onclick = resetForm;
+
+function edit(id) {
+  const o = data.find(x => x.id === id);
+  if (!o) return;
+  editId = id;
+  $('account').value = o.account;
+  $('type').value = o.type;
+  $('date').value = o.date;
+  $('amount').value = o.amount;
+  $('cat').value = o.cat;
+  $('label').value = o.label || '';
+  $('submit').textContent = 'Enregistrer la modification';
+  $('formTitle').textContent = 'Modifier l\'opération';
+  $('cancel').style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function del(id) {
+  if (!confirm('Supprimer cette opération ?')) return;
+  data = data.filter(o => o.id !== id);
+  if (editId === id) resetForm();
+  save();
+  render();
+}
 
 $('metrics').onclick = e => {
   if (e.target.dataset.m) { metric = e.target.dataset.m; render(); }
@@ -138,11 +183,13 @@ $('export').onclick = () => {
   a.click();
 };
 
-function del(id) {
-  data = data.filter(o => o.id !== id);
-  save();
-  render();
-}
+const row = (o, sub) => `<div class='item'>
+  <span class='badge' style='background:${COLORS[o.account] || '#94a3b8'}'>${esc(o.account)}</span>
+  <span class='t'>${esc(o.label || o.cat)}<small>${sub}</small></span>
+  <strong>${eur(o.amount)}</strong>
+  <button class='ed' onclick='edit(${o.id})'>✎</button>
+  <button class='x' onclick='del(${o.id})'>×</button>
+</div>`;
 
 function render() {
   const names = Object.keys(COLORS);
@@ -194,23 +241,26 @@ function render() {
   // Catégories proposées
   $('cats').innerHTML = [...new Set(data.map(o => o.cat))].map(c => `<option value='${esc(c)}'>`).join('');
 
-  // Filtres du détail
+  // Filtres
   $('filters').innerHTML = ['Tous'].concat(names)
     .map(f => `<button data-f='${f}' class='${f === filter ? 'on' : ''}'>${f}</button>`).join('');
 
-  // Détail des dépenses par catégorie
-  const dep = data.filter(o => o.type === 'depense' && (filter === 'Tous' || o.account === filter));
+  const visible = data.filter(o => filter === 'Tous' || o.account === filter);
+
+  // Revenus
+  const inc = visible.filter(o => o.type === 'revenu').sort((a, b) => b.date.localeCompare(a.date));
+  $('incomes').innerHTML = inc.length
+    ? inc.map(o => row(o, `${o.date} · ${esc(o.cat)}`)).join('')
+    : "<p class='empty'>Aucun revenu pour le moment.</p>";
+
+  // Dépenses par catégorie
+  const dep = visible.filter(o => o.type === 'depense');
   const cats = [...new Set(dep.map(o => o.cat))].sort();
   $('detail').innerHTML = cats.length ? cats.map(c => {
     const items = dep.filter(o => o.cat === c).sort((a, b) => b.date.localeCompare(a.date));
     const total = items.reduce((s, o) => s + o.amount, 0);
     return `<div class='cat'><span>${esc(c)}</span><span>${eur(total)}</span></div>` +
-      items.map(o => `<div class='item'>
-        <span class='badge' style='background:${COLORS[o.account] || '#94a3b8'}'>${esc(o.account)}</span>
-        <span class='t'>${esc(o.label || '—')}<small>${o.date}</small></span>
-        <strong>${eur(o.amount)}</strong>
-        <button class='x' onclick='del(${o.id})'>×</button>
-      </div>`).join('');
+      items.map(o => row(o, o.date)).join('');
   }).join('') : "<p class='empty'>Aucune dépense pour le moment.</p>";
 }
 
