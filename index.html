@@ -1,105 +1,219 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang='fr'>
 <head>
-<meta charset="UTF-8">
-<title>Suivi revenus et dépenses</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<meta charset='UTF-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<meta name='apple-mobile-web-app-capable' content='yes'>
+<meta name='apple-mobile-web-app-title' content='Comptes'>
+<meta name='theme-color' content='#0f172a'>
+<title>Mes comptes</title>
+<script src='https://cdn.jsdelivr.net/npm/chart.js'></script>
 <style>
-  body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; padding: 0 12px; background: #f5f6fa; color: #222; }
-  h1 { text-align: center; }
-  .card { background: #fff; border-radius: 10px; padding: 16px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
-  form { display: flex; flex-wrap: wrap; gap: 8px; }
-  input, select, button { padding: 8px; font-size: 14px; }
-  button { background: #2d6cdf; color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
-  button.sec { background: #888; }
-  button.del { background: #d64545; padding: 3px 8px; }
-  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-  th, td { text-align: left; padding: 6px; border-bottom: 1px solid #eee; font-size: 14px; }
-  .cat { display: flex; justify-content: space-between; font-weight: bold; background: #eef2fb; padding: 8px; border-radius: 6px; margin-top: 14px; }
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:linear-gradient(160deg,#0f172a,#1e1b4b);color:#e2e8f0;min-height:100vh}
+.wrap{max-width:760px;margin:0 auto;padding:20px 14px 40px}
+header{text-align:center;margin-bottom:18px}
+h1{margin:0;font-size:28px}
+header p{margin:4px 0 0;color:#94a3b8}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.acc,.card{background:rgba(30,41,59,.85);border-radius:16px;padding:16px;box-shadow:0 4px 18px rgba(0,0,0,.25)}
+.card{margin-bottom:14px}
+.acc h3{margin:0 0 6px;font-size:15px;color:#94a3b8}
+.big{font-size:22px;font-weight:700}
+.row{display:flex;flex-direction:column;gap:2px;margin-top:8px;font-size:13px}
+.pos{color:#4ade80}
+.neg{color:#f87171}
+h2{margin:0 0 12px;font-size:17px}
+form{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+input,select,button{font-size:16px;padding:11px;border-radius:10px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-family:inherit}
+#cat,#label,.primary{grid-column:1/-1}
+.primary{background:linear-gradient(135deg,#6366f1,#8b5cf6);border:0;font-weight:600;color:#fff}
+.head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.head h2{margin:0}
+.seg{display:flex;gap:4px;background:#0f172a;padding:3px;border-radius:10px}
+.seg button{border:0;padding:6px 10px;font-size:13px;background:transparent;color:#94a3b8}
+.seg button.on{background:#6366f1;color:#fff}
+.chartbox{position:relative;height:280px}
+.cat{display:flex;justify-content:space-between;font-weight:600;background:#0f172a;padding:10px 12px;border-radius:10px;margin-top:12px}
+.item{display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #334155;font-size:14px}
+.item .t{flex:1}
+.item small{color:#94a3b8;display:block}
+.badge{font-size:11px;padding:2px 8px;border-radius:99px;color:#0f172a;font-weight:600}
+.x{background:#7f1d1d;border:0;padding:4px 10px;font-size:14px}
+.ghost{width:100%;background:transparent}
+.empty{color:#94a3b8}
 </style>
 </head>
 <body>
-<h1>Suivi revenus et dépenses</h1>
+<div class='wrap'>
+  <header><h1>Mes comptes</h1><p>Abbes · Entreprise</p></header>
 
-<div class="card">
-  <form id="f">
-    <input type="date" id="date" required>
-    <select id="type"><option value="revenu">Revenu</option><option value="depense">Dépense</option></select>
-    <input list="cats" id="cat" placeholder="Catégorie (ex : Loyer)" required>
-    <datalist id="cats"></datalist>
-    <input id="label" placeholder="Libellé">
-    <input type="number" step="0.01" id="amount" placeholder="Montant €" required>
-    <button type="submit">Ajouter</button>
-    <button type="button" class="sec" id="export">Exporter CSV</button>
-  </form>
-</div>
+  <section id='cards' class='grid'></section>
 
-<div class="card"><canvas id="chart" height="110"></canvas></div>
+  <section class='card'>
+    <h2>Nouvelle opération</h2>
+    <form id='f'>
+      <select id='account'><option>Abbes</option><option>Entreprise</option></select>
+      <select id='type'><option value='revenu'>Revenu</option><option value='depense'>Dépense</option></select>
+      <input type='date' id='date' required>
+      <input type='number' step='0.01' id='amount' placeholder='Montant €' required>
+      <input list='cats' id='cat' placeholder='Catégorie (ex : Loyer)' required>
+      <datalist id='cats'></datalist>
+      <input id='label' placeholder='Libellé (facultatif)'>
+      <button type='submit' class='primary'>Ajouter</button>
+    </form>
+  </section>
 
-<div class="card">
-  <h2>Détail des dépenses par catégorie</h2>
-  <div id="detail"></div>
+  <section class='card'>
+    <div class='head'>
+      <h2>Évolution par mois</h2>
+      <div class='seg' id='metrics'>
+        <button data-m='solde' class='on'>Solde</button>
+        <button data-m='revenu'>Revenus</button>
+        <button data-m='depense'>Dépenses</button>
+      </div>
+    </div>
+    <div class='chartbox'><canvas id='chart'></canvas></div>
+  </section>
+
+  <section class='card'>
+    <div class='head'>
+      <h2>Détail des dépenses</h2>
+      <div class='seg' id='filters'></div>
+    </div>
+    <div id='detail'></div>
+  </section>
+
+  <button class='ghost' id='export'>Exporter en CSV</button>
 </div>
 
 <script>
-let data = JSON.parse(localStorage.getItem('ops') || '[]');
+const COLORS = { Abbes: '#818cf8', Entreprise: '#fbbf24' };
+const eur = n => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
+const esc = s => { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
+
+let data = [];
+try { data = JSON.parse(localStorage.getItem('ops') || '[]'); } catch (e) { data = []; }
+data = data.map(o => Object.assign({ account: 'Abbes' }, o));
+let metric = 'solde', filter = 'Tous', chart;
+
 const save = () => localStorage.setItem('ops', JSON.stringify(data));
-const eur = n => n.toLocaleString('fr-FR', {style:'currency', currency:'EUR'});
-let chart;
+const $ = id => document.getElementById(id);
+const sumOf = (acc, type, m) => data
+  .filter(o => o.account === acc && o.type === type && (!m || o.date.startsWith(m)))
+  .reduce((s, o) => s + o.amount, 0);
 
-document.getElementById('date').valueAsDate = new Date();
+$('date').valueAsDate = new Date();
 
-document.getElementById('f').onsubmit = e => {
+$('f').onsubmit = e => {
   e.preventDefault();
   data.push({
     id: Date.now(),
-    date: date.value,
-    type: type.value,
-    cat: cat.value.trim(),
-    label: label.value.trim(),
-    amount: parseFloat(amount.value)
+    account: $('account').value,
+    date: $('date').value,
+    type: $('type').value,
+    cat: $('cat').value.trim(),
+    label: $('label').value.trim(),
+    amount: parseFloat($('amount').value)
   });
-  save(); label.value = ''; amount.value = ''; render();
+  save();
+  $('label').value = '';
+  $('amount').value = '';
+  render();
 };
 
-document.getElementById('export').onclick = () => {
-  const rows = ['date;type;categorie;libelle;montant']
-    .concat(data.map(o => [o.date, o.type, o.cat, o.label, o.amount].join(';')));
+$('metrics').onclick = e => {
+  if (e.target.dataset.m) { metric = e.target.dataset.m; render(); }
+};
+$('filters').onclick = e => {
+  if (e.target.dataset.f) { filter = e.target.dataset.f; render(); }
+};
+
+$('export').onclick = () => {
+  const rows = ['date;compte;type;categorie;libelle;montant']
+    .concat(data.map(o => [o.date, o.account, o.type, o.cat, o.label, o.amount].join(';')));
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([rows.join('\n')], {type:'text/csv'}));
-  a.download = 'operations.csv'; a.click();
+  a.href = URL.createObjectURL(new Blob([rows.join('\n')], { type: 'text/csv' }));
+  a.download = 'operations.csv';
+  a.click();
 };
 
-function remove(id) { data = data.filter(o => o.id !== id); save(); render(); }
+function del(id) {
+  data = data.filter(o => o.id !== id);
+  save();
+  render();
+}
 
 function render() {
-  // Courbes par mois
-  const months = [...new Set(data.map(o => o.date.slice(0,7)))].sort();
-  const sum = t => months.map(m => data.filter(o => o.type===t && o.date.startsWith(m)).reduce((s,o)=>s+o.amount,0));
+  const names = Object.keys(COLORS);
+
+  // Cartes des comptes
+  $('cards').innerHTML = names.map(a => {
+    const r = sumOf(a, 'revenu'), d = sumOf(a, 'depense');
+    return `<div class='acc' style='border-top:4px solid ${COLORS[a]}'>
+      <h3>${a}</h3>
+      <div class='big'>${eur(r - d)}</div>
+      <div class='row'><span class='pos'>+ ${eur(r)}</span><span class='neg'>− ${eur(d)}</span></div>
+    </div>`;
+  }).join('');
+
+  // Boutons du graphique
+  document.querySelectorAll('#metrics button').forEach(b => b.classList.toggle('on', b.dataset.m === metric));
+
+  // Graphique : une courbe par compte
+  const months = [...new Set(data.map(o => o.date.slice(0, 7)))].sort();
+  const val = (a, m) => metric === 'solde'
+    ? sumOf(a, 'revenu', m) - sumOf(a, 'depense', m)
+    : sumOf(a, metric, m);
   if (chart) chart.destroy();
-  chart = new Chart(document.getElementById('chart'), {
+  Chart.defaults.color = '#94a3b8';
+  chart = new Chart($('chart'), {
     type: 'line',
-    data: { labels: months, datasets: [
-      { label: 'Revenus', data: sum('revenu'), borderColor: '#2e9e5b', backgroundColor: '#2e9e5b', tension: .25 },
-      { label: 'Dépenses', data: sum('depense'), borderColor: '#d64545', backgroundColor: '#d64545', tension: .25 }
-    ]},
-    options: { scales: { y: { beginAtZero: true } } }
+    data: {
+      labels: months,
+      datasets: names.map(a => ({
+        label: a,
+        data: months.map(m => val(a, m)),
+        borderColor: COLORS[a],
+        backgroundColor: COLORS[a] + '33',
+        fill: true,
+        tension: 0.35,
+        pointRadius: 4
+      }))
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { grid: { color: '#1e293b' } },
+        y: { grid: { color: '#334155' } }
+      }
+    }
   });
 
-  // Datalist des catégories
-  document.getElementById('cats').innerHTML = [...new Set(data.map(o => o.cat))].map(c => `<option value="${c}">`).join('');
+  // Catégories proposées
+  $('cats').innerHTML = [...new Set(data.map(o => o.cat))].map(c => `<option value='${esc(c)}'>`).join('');
+
+  // Filtres du détail
+  $('filters').innerHTML = ['Tous'].concat(names)
+    .map(f => `<button data-f='${f}' class='${f === filter ? 'on' : ''}'>${f}</button>`).join('');
 
   // Détail des dépenses par catégorie
-  const dep = data.filter(o => o.type === 'depense');
+  const dep = data.filter(o => o.type === 'depense' && (filter === 'Tous' || o.account === filter));
   const cats = [...new Set(dep.map(o => o.cat))].sort();
-  document.getElementById('detail').innerHTML = cats.length ? cats.map(c => {
-    const items = dep.filter(o => o.cat === c).sort((a,b) => b.date.localeCompare(a.date));
-    const total = items.reduce((s,o) => s+o.amount, 0);
-    return `<div class="cat"><span>${c}</span><span>${eur(total)}</span></div>
-      <table>${items.map(o => `<tr><td>${o.date}</td><td>${o.label || ''}</td><td>${eur(o.amount)}</td>
-      <td><button class="del" onclick="remove(${o.id})">×</button></td></tr>`).join('')}</table>`;
-  }).join('') : '<p>Aucune dépense pour le moment.</p>';
+  $('detail').innerHTML = cats.length ? cats.map(c => {
+    const items = dep.filter(o => o.cat === c).sort((a, b) => b.date.localeCompare(a.date));
+    const total = items.reduce((s, o) => s + o.amount, 0);
+    return `<div class='cat'><span>${esc(c)}</span><span>${eur(total)}</span></div>` +
+      items.map(o => `<div class='item'>
+        <span class='badge' style='background:${COLORS[o.account] || '#94a3b8'}'>${esc(o.account)}</span>
+        <span class='t'>${esc(o.label || '—')}<small>${o.date}</small></span>
+        <strong>${eur(o.amount)}</strong>
+        <button class='x' onclick='del(${o.id})'>×</button>
+      </div>`).join('');
+  }).join('') : "<p class='empty'>Aucune dépense pour le moment.</p>";
 }
+
 render();
 </script>
 </body>
