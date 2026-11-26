@@ -32,6 +32,7 @@ input,select,button{font-size:16px;padding:11px;border-radius:10px;border:1px so
 .primary{background:linear-gradient(135deg,#6366f1,#8b5cf6);border:0;font-weight:600;color:#fff}
 .head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px}
 .head h2{margin:0}
+.ctrl{display:flex;gap:8px;flex-wrap:wrap}
 .seg{display:flex;gap:4px;background:#0f172a;padding:3px;border-radius:10px}
 .seg button{border:0;padding:6px 10px;font-size:13px;background:transparent;color:#94a3b8}
 .seg button.on{background:#6366f1;color:#fff}
@@ -70,11 +71,17 @@ input,select,button{font-size:16px;padding:11px;border-radius:10px;border:1px so
 
   <section class='card'>
     <div class='head'>
-      <h2>Évolution par mois</h2>
-      <div class='seg' id='metrics'>
-        <button data-m='solde' class='on'>Solde</button>
-        <button data-m='revenu'>Revenus</button>
-        <button data-m='depense'>Dépenses</button>
+      <h2>Évolution</h2>
+      <div class='ctrl'>
+        <div class='seg' id='modes'>
+          <button data-c='1' class='on'>Cumulé</button>
+          <button data-c='0'>Par mois</button>
+        </div>
+        <div class='seg' id='metrics'>
+          <button data-m='revenu' class='on'>Revenus</button>
+          <button data-m='depense'>Dépenses</button>
+          <button data-m='solde'>Solde</button>
+        </div>
       </div>
     </div>
     <div class='chartbox'><canvas id='chart'></canvas></div>
@@ -102,12 +109,18 @@ const esc = s => { const d = document.createElement('div'); d.textContent = s; r
 let data = [];
 try { data = JSON.parse(localStorage.getItem('ops') || '[]'); } catch (e) { data = []; }
 data = data.map(o => Object.assign({ account: 'Abbes' }, o));
-let metric = 'solde', filter = 'Tous', chart, editId = null;
+let metric = 'revenu', cum = true, filter = 'Tous', chart, editId = null;
 
 const save = () => localStorage.setItem('ops', JSON.stringify(data));
 const $ = id => document.getElementById(id);
-const sumOf = (acc, type, m) => data
-  .filter(o => o.account === acc && o.type === type && (!m || o.date.startsWith(m)))
+
+// Somme d'un mois précis
+const sumMonth = (acc, type, m) => data
+  .filter(o => o.account === acc && o.type === type && o.date.slice(0, 7) === m)
+  .reduce((s, o) => s + o.amount, 0);
+// Somme cumulée jusqu'à la fin d'un mois (ou total si m est vide)
+const sumUpTo = (acc, type, m) => data
+  .filter(o => o.account === acc && o.type === type && (!m || o.date.slice(0, 7) <= m))
   .reduce((s, o) => s + o.amount, 0);
 
 function resetForm() {
@@ -170,6 +183,9 @@ function del(id) {
 $('metrics').onclick = e => {
   if (e.target.dataset.m) { metric = e.target.dataset.m; render(); }
 };
+$('modes').onclick = e => {
+  if (e.target.dataset.c !== undefined) { cum = e.target.dataset.c === '1'; render(); }
+};
 $('filters').onclick = e => {
   if (e.target.dataset.f) { filter = e.target.dataset.f; render(); }
 };
@@ -191,12 +207,32 @@ const row = (o, sub) => `<div class='item'>
   <button class='x' onclick='del(${o.id})'>×</button>
 </div>`;
 
+// Liste continue des mois, du premier jusqu'au mois en cours
+function monthRange() {
+  if (!data.length) return [];
+  const now = new Date();
+  const cur = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const ms = data.map(o => o.date.slice(0, 7)).sort();
+  const first = ms[0];
+  const last = ms[ms.length - 1] > cur ? ms[ms.length - 1] : cur;
+  const out = [];
+  let [y, mo] = first.split('-').map(Number);
+  while (true) {
+    const k = y + '-' + String(mo).padStart(2, '0');
+    out.push(k);
+    if (k >= last) break;
+    mo++;
+    if (mo > 12) { mo = 1; y++; }
+  }
+  return out;
+}
+
 function render() {
   const names = Object.keys(COLORS);
 
   // Cartes des comptes
   $('cards').innerHTML = names.map(a => {
-    const r = sumOf(a, 'revenu'), d = sumOf(a, 'depense');
+    const r = sumUpTo(a, 'revenu'), d = sumUpTo(a, 'depense');
     return `<div class='acc' style='border-top:4px solid ${COLORS[a]}'>
       <h3>${a}</h3>
       <div class='big'>${eur(r - d)}</div>
@@ -206,12 +242,14 @@ function render() {
 
   // Boutons du graphique
   document.querySelectorAll('#metrics button').forEach(b => b.classList.toggle('on', b.dataset.m === metric));
+  document.querySelectorAll('#modes button').forEach(b => b.classList.toggle('on', (b.dataset.c === '1') === cum));
 
   // Graphique : une courbe par compte
-  const months = [...new Set(data.map(o => o.date.slice(0, 7)))].sort();
+  const months = monthRange();
+  const f = cum ? sumUpTo : sumMonth;
   const val = (a, m) => metric === 'solde'
-    ? sumOf(a, 'revenu', m) - sumOf(a, 'depense', m)
-    : sumOf(a, metric, m);
+    ? f(a, 'revenu', m) - f(a, 'depense', m)
+    : f(a, metric, m);
   if (chart) chart.destroy();
   Chart.defaults.color = '#94a3b8';
   chart = new Chart($('chart'), {
@@ -224,7 +262,7 @@ function render() {
         borderColor: COLORS[a],
         backgroundColor: COLORS[a] + '33',
         fill: true,
-        tension: 0.35,
+        tension: cum ? 0 : 0.35,
         pointRadius: 4
       }))
     },
@@ -243,7 +281,7 @@ function render() {
 
   // Filtres
   $('filters').innerHTML = ['Tous'].concat(names)
-    .map(f => `<button data-f='${f}' class='${f === filter ? 'on' : ''}'>${f}</button>`).join('');
+    .map(x => `<button data-f='${x}' class='${x === filter ? 'on' : ''}'>${x}</button>`).join('');
 
   const visible = data.filter(o => filter === 'Tous' || o.account === filter);
 
